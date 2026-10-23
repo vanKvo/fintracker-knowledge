@@ -1,0 +1,25 @@
+# KN-VS-05: the isolation and recall suite runs on every change to the service or its schema.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pipx install poetry
+      - run: poetry install --no-interaction
+      - name: Tests (Testcontainers pgvector)
+        run: poetry run pytest -q
+      - name: Type check
+        run: poetry run mypy src
