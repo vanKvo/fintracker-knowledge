@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from src.retrieval_quality.models import GoldenQuestion
+from src.retrieval_quality.schemas import GoldenQuestion
 
 
 def load_golden_questions(path: Path) -> list[GoldenQuestion]:

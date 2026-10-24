@@ -11,9 +11,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Literal
 
-from src.model_switch.models import ModelSwitchRefused
+from src.model_switch.exceptions import ModelSwitchRefused
 from src.model_switch.repository import ActiveModelSetting, ModelIndex
-from src.retrieval_quality.models import QualityGateFailed
+from src.retrieval_quality.exceptions import QualityGateFailed
 
 RebuildStatus = Literal["succeeded", "partial", "failed"]
 

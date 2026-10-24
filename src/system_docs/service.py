@@ -18,10 +18,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Protocol, TypeVar
 
-from src.chunking.models import Chunk
+from src.chunking.schemas import Chunk
 from src.chunking.service import chunk_markdown
-from src.embedding.models import EmbeddedChunk, EmbeddingUnavailable
-from src.system_docs import models as m
+from src.core.exceptions import DatabaseUnavailableError, EmbeddingUnavailableError
+from src.embedding.schemas import EmbeddedChunk
+from src.system_docs import schemas as m
+from src.system_docs.exceptions import InvalidSource, SourceMissing
+from src.system_docs.models import RunRecord
 from src.system_docs.publisher import MAX_DOC_BYTES
 from src.system_docs.repository import DocumentIndex
 from src.system_docs.source import DocSource
@@ -48,7 +51,7 @@ class SystemDocsIndexer:
         active_model: str,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-        emit_metrics: Callable[[m.RunRecord], None] | None = None,
+        emit_metrics: Callable[[RunRecord], None] | None = None,
     ) -> None:
         self._source = source
         self._index = index
@@ -85,11 +88,11 @@ class SystemDocsIndexer:
         try:
             data = self._source.read(path)
             if len(data) > MAX_DOC_BYTES:
-                raise m.InvalidSource()
+                raise InvalidSource()
             try:
                 markdown = data.decode("utf-8")
             except UnicodeDecodeError:
-                raise m.InvalidSource() from None
+                raise InvalidSource() from None
             digest = hashlib.sha256(data).hexdigest()
             if not force and self._retry(lambda: self._index.is_indexed(path, digest, model)):
                 return self._done(m.BranchResult(path, m.SKIPPED))
@@ -98,26 +101,26 @@ class SystemDocsIndexer:
             embedded = self._retry(lambda: embedder.embed_chunks(chunks))
             written = self._retry(lambda: self._index.replace(path, digest, commit, model, embedded))
             return self._done(m.BranchResult(path, m.INDEXED, written))
-        except m.SourceMissing:
+        except SourceMissing:
             return self._done(m.BranchResult(path, m.SOURCE_MISSING))
-        except m.InvalidSource:
+        except InvalidSource:
             return self._done(m.BranchResult(path, m.INVALID_SOURCE))
-        except EmbeddingUnavailable:
+        except EmbeddingUnavailableError:
             return self._done(m.BranchResult(path, m.EMBEDDING_UNAVAILABLE))
-        except m.DatabaseUnavailable:
+        except DatabaseUnavailableError:
             return self._done(m.BranchResult(path, m.DATABASE_UNAVAILABLE))
 
     def process_deleted(self, path: str) -> m.BranchResult:
         try:
             return self._done(m.BranchResult(path, m.deleted_outcome(self._retry(lambda: self._index.delete(path)))))
-        except m.DatabaseUnavailable:
+        except DatabaseUnavailableError:
             return self._done(m.BranchResult(path, m.DATABASE_UNAVAILABLE))
 
     def _retry(self, step: Callable[[], T]) -> T:
         for delay in RETRY_BACKOFF_SECONDS:
             try:
                 return step()
-            except (EmbeddingUnavailable, m.DatabaseUnavailable):
+            except (EmbeddingUnavailableError, DatabaseUnavailableError):
                 self._sleep(delay)
         return step()
 
@@ -134,7 +137,7 @@ class SystemDocsIndexer:
 
         failed = count("failed")
         status: m.RunStatus = "failed" if branches and failed == len(branches) else "partial" if failed else "succeeded"
-        record = m.RunRecord(
+        record = RunRecord(
             run_id=str(uuid.uuid4()),
             mode=mode,
             commit=commit,
@@ -153,7 +156,7 @@ class SystemDocsIndexer:
         return m.RunResult(record, tuple(branches))
 
 
-def _log_metrics(record: m.RunRecord) -> None:
+def _log_metrics(record: RunRecord) -> None:
     logger.info(
         "Index run finished: run_id=%s mode=%s commit=%s status=%s indexed=%d skipped=%d deleted=%d failed=%d chunks=%d",
         record.run_id, record.mode, record.commit, record.status, record.docs_indexed, record.docs_skipped,

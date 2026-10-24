@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from botocore.exceptions import ClientError
 
-from src.system_docs.models import SourceMissing
+from src.system_docs.exceptions import SourceMissing
 
 PREFIX = "system-docs/"
 MANIFEST_PREFIX = f"{PREFIX}_manifests/"

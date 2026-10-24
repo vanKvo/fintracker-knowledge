@@ -7,12 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Collection
 
-
-class CallerNotAllowed(Exception):
-    def __init__(self) -> None:
-        super().__init__("The caller is not allowed to do this.")
+from src.core.exceptions import CallerNotAllowedError
 
 
 def authorize_caller(caller_arn: str | None, allowed_arns: Collection[str]) -> None:
     if not caller_arn or caller_arn not in allowed_arns:
-        raise CallerNotAllowed()
+        raise CallerNotAllowedError(log_message="caller not on the allow-list")

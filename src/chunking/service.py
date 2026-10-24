@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
-from src.chunking.models import Chunk
+from src.chunking.schemas import Chunk
 from src.config.knowledge_config import ChunkingConfig
 
 TokenCounter = Callable[[str], int]

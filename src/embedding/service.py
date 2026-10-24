@@ -15,10 +15,12 @@ import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from src.chunking.models import Chunk
+from src.chunking.schemas import Chunk
 from src.chunking.service import estimate_tokens
 from src.config.knowledge_config import EmbeddingConfig
-from src.embedding.models import EmbeddedChunk, EmbeddingInputTooLong, EmbeddingUnavailable
+from src.core.exceptions import EmbeddingUnavailableError
+from src.embedding.exceptions import EmbeddingInputTooLong
+from src.embedding.schemas import EmbeddedChunk
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class Embedder:
                 logger.error("Embedding call failed (attempt %d of %d): %s", attempt + 1, attempts, type(exc).__name__)
                 if attempt < attempts - 1:
                     self._sleep(self._config.retry_backoff_seconds[attempt])
-        raise EmbeddingUnavailable()
+        raise EmbeddingUnavailableError(log_message=f"embedding failed after {attempts} attempts")
 
     def _invoke(self, text: str) -> tuple[float, ...]:
         response = self._client.invoke_model(

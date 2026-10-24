@@ -15,7 +15,8 @@ from typing import Any, Protocol
 
 from botocore.exceptions import ClientError
 
-from src.system_docs.models import InvalidManifest, Manifest
+from src.system_docs.exceptions import InvalidManifest
+from src.system_docs.schemas import Manifest
 
 logger = logging.getLogger(__name__)
 

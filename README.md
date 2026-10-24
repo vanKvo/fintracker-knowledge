@@ -36,7 +36,7 @@ KN-SDOC (system docs indexing):
 
 KN-RET (retrieval):
 
-- `src/retrieval/models.py` — strict request validation (Appendix A), response shape (B), documented errors (C).
+- `src/retrieval/schemas.py` — strict request validation (Appendix A) and response shape (B); errors (C) are the shared `src/core/exceptions.py`, returned as RFC 9457 problem+json by `src/core/error_handlers.py`.
 - `src/retrieval/service.py` — validate, embed, scoped search, ownership re-check, per-document cap of 3, 3 s budget
   (worker thread abandoned on timeout), one DB retry after 1 s.
 - `src/retrieval/repository.py` — search as `kn_retrieve`; user context and HNSW settings set in the same transaction.

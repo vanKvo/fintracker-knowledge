@@ -10,18 +10,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from src.retrieval_quality.models import (
+from src.retrieval_quality.exceptions import GoldenSetTooSmall, QualityGateFailed
+from src.retrieval_quality.repository import BaselineStore
+from src.retrieval_quality.schemas import (
     MAX_DROP,
     MIN_GOLDEN_QUESTIONS,
     RECALL_K,
     RECALL_THRESHOLD,
     GoldenQuestion,
-    GoldenSetTooSmall,
     MissedQuestion,
-    QualityGateFailed,
     QualityReport,
 )
-from src.retrieval_quality.repository import BaselineStore
 
 Retrieve = Callable[[str, int], Sequence[str]]
 _EPSILON = 1e-9

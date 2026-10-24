@@ -1,4 +1,4 @@
-"""KN-CHUNK-03: embedding model switch types.
+"""KN-CHUNK-03: embedding model switch errors.
 
 __author__ = "Van Vo"
 """

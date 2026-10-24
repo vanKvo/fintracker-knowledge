@@ -37,15 +37,3 @@ class QualityReport:
     @property
     def passed(self) -> bool:
         return self.failure is None
-
-
-class GoldenSetTooSmall(ValueError):
-    pass
-
-
-class QualityGateFailed(Exception):
-    """Carries the score and baseline in its message; never question or chunk text."""
-
-    def __init__(self, message: str, report: QualityReport | None = None) -> None:
-        super().__init__(message)
-        self.report = report

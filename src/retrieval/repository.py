@@ -2,7 +2,7 @@
 
 `connection` opens one transaction per call, already running as kn_retrieve. The user context and
 search settings are set inside it, so Row-Level Security applies to the query (KN-VS-03, -04). Any
-database failure surfaces as DatabaseUnavailable; the driver's message is never passed on.
+database failure surfaces as DatabaseUnavailableError; the driver's message is never passed on.
 
 __author__ = "Van Vo"
 """
@@ -18,7 +18,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.retrieval.models import DatabaseUnavailable, SearchHit, SearchResult
+from src.core.exceptions import DatabaseUnavailableError
+from src.retrieval.models import SearchHit, SearchResult
 from src.vector_store.session import SEARCH_SESSION_SQL, SET_USER_CONTEXT_SQL
 
 logger = logging.getLogger(__name__)
@@ -68,8 +69,8 @@ class PostgresChunkSearch:
                     {"model": model},
                 ).scalar()
         except SQLAlchemyError as exc:
-            logger.error("Database call failed: %s", type(exc).__name__)
-            raise DatabaseUnavailable() from None
+            logger.error("Database call failed: %s", type(exc).__name__)  # indexing records it as an outcome only
+            raise DatabaseUnavailableError(log_message=f"database call failed: {type(exc).__name__}") from exc
         hits = [
             SearchHit(str(r[0]), str(r[1]), r[2], r[3], r[4], r[5], r[6], float(r[7])) for r in rows
         ]

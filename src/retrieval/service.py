@@ -1,7 +1,7 @@
 """KN-RET-02 to KN-RET-08: validate, embed, search, re-check ownership, shape the response.
 
 The user always arrives as an argument from the verified context, never from the body. Every step
-failure becomes one documented RetrievalError; exception text, query text and chunk text are never
+failure becomes one documented `AppError` (core/exceptions.py); exception text, query text and chunk text are never
 logged or returned (only the exception type, IDs, counts, scores and timings).
 
 __author__ = "Van Vo"
@@ -18,18 +18,22 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from src.config.knowledge_config import EmbeddingConfig
-from src.embedding.models import EmbeddingInputTooLong, EmbeddingUnavailable
+from src.core.exceptions import (
+    AppError,
+    DatabaseUnavailableError,
+    DeadlineExceededError,
+    InvalidArgumentError,
+)
+from src.embedding.exceptions import EmbeddingInputTooLong
 from src.retrieval.metrics import RequestMetrics, RetrievalMetrics
-from src.retrieval.models import (
-    DatabaseUnavailable,
-    RetrievalError,
+from src.retrieval.models import SearchHit, SearchResult
+from src.retrieval.repository import SEARCH_POOL, ChunkSearch
+from src.retrieval.schemas import (
     RetrievedChunk,
     RetrieveRequest,
     RetrieveResponse,
-    SearchHit,
     parse_request,
 )
-from src.retrieval.repository import SEARCH_POOL, ChunkSearch
 
 logger = logging.getLogger(__name__)
 
@@ -75,22 +79,22 @@ class RetrievalService:
     def retrieve(self, request_id: str, caller: str | None, user_id: str, body: Any) -> RetrieveResponse:
         started = time.monotonic()
         progress = _Progress()
-        error: RetrievalError | None = None
+        error: AppError | None = None
         # A worker thread lets the call be abandoned at the budget (KN-RET-07); it can't be cancelled,
         # but its result is ignored and its own client timeouts bound how long it lingers.
         pool = ThreadPoolExecutor(max_workers=1)
         try:
             return pool.submit(self._run, request_id, user_id, body, progress).result(timeout=self._budget)
         except FutureTimeout:
-            error = RetrievalError("timeout")
+            error = DeadlineExceededError(log_message=f"retrieval ran past {self._budget}s")
             raise error from None
-        except RetrievalError as exc:
+        except AppError as exc:
             error = exc
             raise
-        except Exception as exc:  # noqa: BLE001 - anything else is reported generically
-            logger.error("Retrieval failed (request %s): %s", request_id, type(exc).__name__)
-            error = RetrievalError("internal_error")
-            raise error from None
+        except Exception as exc:
+            # A bug. The handler logs it with the traceback; the metric records it as internal_error.
+            error = AppError(log_message=f"unhandled {type(exc).__name__}")
+            raise error from exc
         finally:
             pool.shutdown(wait=False)
             self._emit(request_id, caller, progress, error, (time.monotonic() - started) * 1000)
@@ -117,21 +121,16 @@ class RetrievalService:
     def _embed(self, query: str) -> tuple[float, ...]:
         try:
             return self._embedder.embed_query(query)
-        except EmbeddingUnavailable:
-            raise RetrievalError("embedding_unavailable") from None
         except EmbeddingInputTooLong:
-            raise RetrievalError("invalid_argument", "query") from None
+            raise InvalidArgumentError.for_field("query") from None
 
-    def _search_with_retry(self, user_id: str, vector: tuple[float, ...], scope: str):  # type: ignore[no-untyped-def]
+    def _search_with_retry(self, user_id: str, vector: tuple[float, ...], scope: str) -> SearchResult:
         model = self._config.active_embedding_model
         try:
             return self._search.search(user_id, vector, scope, model, SEARCH_POOL)
-        except DatabaseUnavailable:
+        except DatabaseUnavailableError:
             self._sleep(DB_RETRY_DELAY_SECONDS)  # also covers an Aurora resume from pause in dev
-        try:
-            return self._search.search(user_id, vector, scope, model, SEARCH_POOL)
-        except DatabaseUnavailable:
-            raise RetrievalError("database_unavailable") from None
+        return self._search.search(user_id, vector, scope, model, SEARCH_POOL)  # a second failure propagates
 
     def _owned(self, hit: SearchHit, scope: str, user_id: str, request_id: str) -> bool:
         """KN-RET-05: second line of defence behind RLS. A mismatch is dropped and signalled."""
@@ -141,7 +140,7 @@ class RetrievalService:
         return ok
 
     def _emit(
-        self, request_id: str, caller: str | None, progress: _Progress, error: RetrievalError | None, total_ms: float
+        self, request_id: str, caller: str | None, progress: _Progress, error: AppError | None, total_ms: float
     ) -> None:
         request = progress.request
         try:

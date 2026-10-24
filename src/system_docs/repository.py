@@ -1,7 +1,7 @@
 """System-doc rows and run records, written as role kn_ingest (KN-SDOC-03, -06).
 
 `connection` opens one transaction per call, already running as kn_ingest. Any database failure
-surfaces as DatabaseUnavailable; the driver's message (SQL, identifiers) is never passed on.
+surfaces as DatabaseUnavailableError; the driver's message (SQL, identifiers) is never passed on.
 
 __author__ = "Van Vo"
 """
@@ -19,8 +19,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.embedding.models import EmbeddedChunk
-from src.system_docs.models import DatabaseUnavailable, IndexStatus, RunRecord
+from src.core.exceptions import DatabaseUnavailableError
+from src.embedding.schemas import EmbeddedChunk
+from src.system_docs.models import IndexStatus, RunRecord
 
 logger = logging.getLogger(__name__)
 
@@ -146,5 +147,5 @@ class PostgresDocumentIndex:
             with self._connection() as conn:
                 yield conn
         except SQLAlchemyError as exc:
-            logger.error("Database call failed: %s", type(exc).__name__)
-            raise DatabaseUnavailable() from None
+            logger.error("Database call failed: %s", type(exc).__name__)  # indexing records it as an outcome only
+            raise DatabaseUnavailableError(log_message=f"database call failed: {type(exc).__name__}") from exc

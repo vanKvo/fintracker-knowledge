@@ -9,8 +9,9 @@ from collections.abc import Collection
 from datetime import datetime, timedelta
 
 from src.system_docs.access import authorize_caller
-from src.system_docs.models import IndexStatus, RunStatus
+from src.system_docs.models import IndexStatus
 from src.system_docs.repository import DocumentIndex
+from src.system_docs.schemas import RunStatus
 
 STALE_AFTER = timedelta(minutes=30)
 
