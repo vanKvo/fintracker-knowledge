@@ -13,9 +13,15 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import OperationalError
 
-from src.retrieval.models import DatabaseUnavailable
+from src.core.exceptions import DatabaseUnavailableError
 from src.retrieval.repository import PostgresChunkSearch
-from tests.support.db import EMBEDDING_MODEL, insert_chunk, insert_document, transaction_as, unit_vector
+from tests.support.db import (
+    EMBEDDING_MODEL,
+    insert_chunk,
+    insert_document,
+    transaction_as,
+    unit_vector,
+)
 
 QUERY = tuple(float(x) for x in unit_vector(0).strip("[]").split(","))
 
@@ -119,7 +125,7 @@ def test_database_error_surfaces_as_database_unavailable_without_driver_text() -
     def broken() -> AbstractContextManager[Connection]:
         raise OperationalError("SELECT secret_table", {}, Exception("password authentication failed"))
 
-    with pytest.raises(DatabaseUnavailable) as caught:
+    with pytest.raises(DatabaseUnavailableError) as caught:
         PostgresChunkSearch(broken).search("user-a", QUERY, "system", EMBEDDING_MODEL, 10)
     assert "secret_table" not in str(caught.value) and "password" not in str(caught.value)
 

@@ -15,9 +15,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
-from src.chunking.models import Chunk
-from src.embedding.models import EmbeddedChunk, EmbeddingUnavailable
-from src.system_docs.models import SourceMissing
+from src.chunking.schemas import Chunk
+from src.core.exceptions import EmbeddingUnavailableError
+from src.embedding.schemas import EmbeddedChunk
+from src.system_docs.exceptions import SourceMissing
 from src.system_docs.repository import PostgresDocumentIndex
 from tests.support.db import DIMENSIONS, EMBEDDING_MODEL, transaction_as
 
@@ -86,7 +87,7 @@ class FakeEmbedder:
 class AlwaysUnavailable(FakeEmbedder):
     def embed_chunks(self, chunks: list[Chunk]) -> list[EmbeddedChunk]:
         self.calls += 1
-        raise EmbeddingUnavailable()
+        raise EmbeddingUnavailableError()
 
 
 class Sleeps:

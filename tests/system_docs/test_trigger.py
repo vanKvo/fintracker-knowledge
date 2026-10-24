@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from botocore.exceptions import ClientError
 
-from src.system_docs.models import InvalidManifest
+from src.system_docs.exceptions import InvalidManifest
 from src.system_docs.trigger import parse_manifest, start_ingestion
 
 MANIFEST = {

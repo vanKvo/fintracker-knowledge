@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from botocore.exceptions import ClientError
 
-from src.system_docs.models import SourceMissing
+from src.system_docs.exceptions import SourceMissing
 from src.system_docs.source import S3DocSource
 
 

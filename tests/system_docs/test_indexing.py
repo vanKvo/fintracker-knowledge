@@ -12,10 +12,11 @@ from contextlib import AbstractContextManager
 import pytest
 from sqlalchemy.engine import Connection, Engine
 
-from src.chunking.models import Chunk
-from src.embedding.models import EmbeddedChunk, EmbeddingUnavailable
-from src.system_docs.models import Manifest
+from src.chunking.schemas import Chunk
+from src.core.exceptions import EmbeddingUnavailableError
+from src.embedding.schemas import EmbeddedChunk
 from src.system_docs.repository import PostgresDocumentIndex
+from src.system_docs.schemas import Manifest
 from src.system_docs.service import SystemDocsIndexer
 from tests.support.db import DIMENSIONS, EMBEDDING_MODEL, transaction_as
 from tests.system_docs.fakes import (
@@ -207,7 +208,7 @@ def test_failed_transaction_commits_nothing_and_old_version_stays_searchable(
 
 
 def test_transient_embedding_failure_is_retried_and_the_doc_is_indexed(app_engine: Engine) -> None:
-    embedder = FakeEmbedder(failures=[EmbeddingUnavailable()])
+    embedder = FakeEmbedder(failures=[EmbeddingUnavailableError()])
     indexer, _, sleeps = build(app_engine, FakeSource({PATH: doc("a")}), embedder)
 
     result = indexer.run_manifest(manifest([PATH]))
@@ -234,7 +235,7 @@ def test_one_permanent_failure_leaves_four_docs_indexed_and_the_run_partial(app_
     class FailsFor(FakeEmbedder):
         def embed_chunks(self, chunks: list[Chunk]) -> list[EmbeddedChunk]:
             if "help/3.md" in chunks[0].source_path:
-                raise EmbeddingUnavailable()
+                raise EmbeddingUnavailableError()
             return super().embed_chunks(chunks)
 
     indexer, _, _ = build(app_engine, source, FailsFor())

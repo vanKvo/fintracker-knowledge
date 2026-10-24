@@ -9,8 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from src.retrieval_quality.models import GoldenQuestion, GoldenSetTooSmall, QualityGateFailed
+from src.retrieval_quality.exceptions import GoldenSetTooSmall, QualityGateFailed
 from src.retrieval_quality.repository import BaselineStore, load_golden_questions
+from src.retrieval_quality.schemas import GoldenQuestion
 from src.retrieval_quality.service import evaluate, run_quality_gate
 
 

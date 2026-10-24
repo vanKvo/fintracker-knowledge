@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
-from src.embedding.models import EmbeddingUnavailable
+from src.core.exceptions import EmbeddingUnavailableError
 from src.retrieval.metrics import RequestMetrics
 from src.retrieval.models import SearchHit, SearchResult
 
@@ -86,5 +86,5 @@ class RecordingMetrics:
         self.mismatches.append((chunk_id, request_id))
 
 
-def unavailable() -> EmbeddingUnavailable:
-    return EmbeddingUnavailable()
+def unavailable() -> EmbeddingUnavailableError:
+    return EmbeddingUnavailableError()

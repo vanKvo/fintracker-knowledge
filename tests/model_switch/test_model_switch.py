@@ -5,17 +5,16 @@ __author__ = "Van Vo"
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
-from src.model_switch.models import ModelSwitchRefused
+from src.model_switch.exceptions import ModelSwitchRefused
 from src.model_switch.repository import PostgresModelIndex
 from src.model_switch.service import switch_embedding_model
-from src.retrieval_quality.models import QualityGateFailed
+from src.retrieval_quality.exceptions import QualityGateFailed
 from tests.support.db import insert_chunk, insert_document, transaction_as, unit_vector
 
 OLD = "old.model:1"

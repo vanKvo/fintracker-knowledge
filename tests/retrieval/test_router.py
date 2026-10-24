@@ -11,7 +11,8 @@ from typing import Any
 
 import pytest
 
-from src.retrieval.models import RetrievalError, SearchResult
+from src.core.exceptions import EmbeddingUnavailableError
+from src.retrieval.models import SearchResult
 from src.retrieval.router import RetrieveHandler
 from src.retrieval.service import RetrievalService
 from tests.retrieval.fakes import (
@@ -62,7 +63,7 @@ def test_caller_not_on_the_allow_list_gets_403_and_no_work_is_done() -> None:
     handler, search, _ = build()
     response = handler.handle(event(caller="arn:aws:iam::111122223333:role/other"))
     assert response["statusCode"] == 403
-    assert json.loads(response["body"])["error"]["code"] == "caller_not_allowed"
+    assert json.loads(response["body"])["code"] == "caller_not_allowed"
     assert search.calls == []
 
 
@@ -76,7 +77,7 @@ def test_missing_or_blank_user_context_gets_401(user: str | None) -> None:
     handler, search, _ = build()
     response = handler.handle(event(user=user))
     assert response["statusCode"] == 401
-    assert json.loads(response["body"])["error"]["code"] == "user_context_missing"
+    assert json.loads(response["body"])["code"] == "user_context_missing"
     assert search.calls == []
 
 
@@ -91,20 +92,26 @@ def test_body_that_is_not_json_gets_400() -> None:
     handler, _, _ = build()
     response = handler.handle(event("{not json"))
     assert response["statusCode"] == 400
-    assert json.loads(response["body"])["error"]["code"] == "invalid_argument"
+    assert json.loads(response["body"])["code"] == "invalid_argument"
 
 
-def test_error_body_has_code_generic_message_and_request_id() -> None:
-    handler, _, _ = build(embedder=FakeEmbedder(RetrievalError("embedding_unavailable")))
-    body = json.loads(handler.handle(event())["body"])
-    assert set(body) == {"error"}
-    assert set(body["error"]) == {"code", "message", "request_id"}
-    assert body["error"]["request_id"] == REQUEST_ID
-    assert response_is_json(handler.handle(event()))
+def test_error_body_is_rfc_9457_with_code_and_trace_id_but_no_request_id() -> None:
+    handler, _, _ = build(embedder=FakeEmbedder(EmbeddingUnavailableError()))
+    response = handler.handle(event())
+    body = json.loads(response["body"])
+    assert response["statusCode"] == 503
+    assert response["headers"]["content-type"] == "application/problem+json"
+    assert set(body) == {"type", "title", "status", "detail", "code", "retryable", "trace_id"}
+    assert (body["code"], body["status"], body["retryable"]) == ("embedding_unavailable", 503, True)
+    assert body["type"] == "https://fintracker.app/errors/embedding-unavailable"
+    assert len(body["trace_id"]) == 32 and REQUEST_ID not in response["body"]  # app doc 4.8
 
 
-def response_is_json(response: dict[str, Any]) -> bool:
-    return bool(response["headers"]["content-type"] == "application/json")
+def test_trace_id_comes_from_the_incoming_traceparent() -> None:
+    handler, _, _ = build(embedder=FakeEmbedder(EmbeddingUnavailableError()))
+    traced = event()
+    traced["headers"]["traceparent"] = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    assert json.loads(handler.handle(traced)["body"])["trace_id"] == "4bf92f3577b34da6a3ce929d0e0e4736"
 
 
 def test_unexpected_exception_returns_500_without_its_text_and_logs_the_request_id(
@@ -114,10 +121,12 @@ def test_unexpected_exception_returns_500_without_its_text_and_logs_the_request_
     handler, _, _ = build(embedder=FakeEmbedder(RuntimeError("secret-table kn_chunks exploded")))
     response = handler.handle(event())
     assert response["statusCode"] == 500
-    assert json.loads(response["body"])["error"]["code"] == "internal_error"
+    assert json.loads(response["body"])["code"] == "internal_error"
     assert "secret-table" not in response["body"]
-    logged = "\n".join(r.getMessage() for r in caplog.records)
-    assert REQUEST_ID in logged
+    trace_id = json.loads(response["body"])["trace_id"]
+    logged = "\n".join(r.getMessage() + str(r.__dict__) for r in caplog.records)
+    assert REQUEST_ID in logged and trace_id in logged  # both IDs on the log line
+    assert "secret-table" not in logged  # messages of exceptions that aren't ours are redacted
 
 
 def test_refused_requests_are_still_counted_in_metrics() -> None:

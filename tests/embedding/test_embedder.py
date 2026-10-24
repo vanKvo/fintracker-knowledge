@@ -12,9 +12,10 @@ from typing import Any
 
 import pytest
 
-from src.chunking.models import Chunk
+from src.chunking.schemas import Chunk
 from src.config.knowledge_config import EmbeddingConfig
-from src.embedding.models import EmbeddingInputTooLong, EmbeddingUnavailable
+from src.core.exceptions import EmbeddingUnavailableError
+from src.embedding.exceptions import EmbeddingInputTooLong
 from src.embedding.service import Embedder
 
 DIMS = 1024
@@ -110,7 +111,7 @@ def test_failed_call_is_retried_three_times_with_backoff_then_succeeds() -> None
 def test_exhausted_retries_fail_with_embedding_unavailable_and_no_internal_detail() -> None:
     client = FakeBedrock(RuntimeError(f"arn:aws:bedrock secret {SECRET_TEXT}"))
     emb, sleeps = embedder(client)
-    with pytest.raises(EmbeddingUnavailable) as raised:
+    with pytest.raises(EmbeddingUnavailableError) as raised:
         emb.embed_chunk(make_chunk())
     assert raised.value.code == "embedding_unavailable"
     assert len(client.calls) == 4 and sleeps == [1, 2, 4]
@@ -120,14 +121,14 @@ def test_exhausted_retries_fail_with_embedding_unavailable_and_no_internal_detai
 def test_response_with_wrong_dimension_count_is_treated_as_a_failure() -> None:
     client = FakeBedrock(unit(dims=512))
     emb, _ = embedder(client)
-    with pytest.raises(EmbeddingUnavailable):
+    with pytest.raises(EmbeddingUnavailableError):
         emb.embed_chunk(make_chunk())
 
 
 def test_embedding_a_batch_is_all_or_nothing() -> None:
     client = FakeBedrock(unit(), RuntimeError("down"))
     emb, _ = embedder(client)
-    with pytest.raises(EmbeddingUnavailable):
+    with pytest.raises(EmbeddingUnavailableError):
         emb.embed_chunks([make_chunk("one"), make_chunk("two")])
 
 
@@ -139,6 +140,6 @@ def test_embedding_a_batch_returns_one_result_per_chunk_in_order() -> None:
 
 def test_failure_logs_never_contain_chunk_text(caplog: pytest.LogCaptureFixture) -> None:
     emb, _ = embedder(FakeBedrock(RuntimeError("boom")))
-    with caplog.at_level("DEBUG"), pytest.raises(EmbeddingUnavailable):
+    with caplog.at_level("DEBUG"), pytest.raises(EmbeddingUnavailableError):
         emb.embed_chunk(make_chunk(text=SECRET_TEXT))
     assert SECRET_TEXT not in caplog.text

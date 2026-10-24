@@ -11,7 +11,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from src.system_docs.access import CallerNotAllowed, authorize_caller
+from src.core.exceptions import CallerNotAllowedError
+from src.system_docs.access import authorize_caller
 from src.system_docs.models import IndexStatus, RunRecord
 from src.system_docs.service import SystemDocsIndexer
 from src.system_docs.status import get_index_status, run_alarm, stale_alarm
@@ -106,9 +107,9 @@ def test_rebuild_is_limited_to_allow_listed_callers() -> None:
 
     authorize_caller("arn:aws:iam::1:role/dev-admin", allowed)
     for caller in ("arn:aws:iam::1:role/ai-assistant", "", None):
-        with pytest.raises(CallerNotAllowed):
+        with pytest.raises(CallerNotAllowedError):
             authorize_caller(caller, allowed)
-    with pytest.raises(CallerNotAllowed):
+    with pytest.raises(CallerNotAllowedError):
         authorize_caller("arn:aws:iam::1:role/ci-deploy", ())  # empty allow-list fails closed
 
 
@@ -151,7 +152,7 @@ def test_index_status_is_empty_before_any_run_and_denied_to_other_callers(app_en
     allowed = ("arn:aws:iam::1:role/knowledge",)
 
     assert get_index_status(index, allowed[0], allowed) == IndexStatus(None, None)
-    with pytest.raises(CallerNotAllowed):
+    with pytest.raises(CallerNotAllowedError):
         get_index_status(index, "arn:aws:iam::1:role/ai-assistant", allowed)
 
 

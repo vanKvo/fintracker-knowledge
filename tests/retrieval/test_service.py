@@ -12,9 +12,19 @@ from typing import Any
 
 import pytest
 
-from src.embedding.models import EmbeddingInputTooLong
+from src.core.exceptions import (
+    AppError,
+    CallerNotAllowedError,
+    DatabaseUnavailableError,
+    DeadlineExceededError,
+    EmbeddingUnavailableError,
+    InvalidArgumentError,
+    ScopeNotEnabledError,
+    UserContextMissingError,
+)
+from src.embedding.exceptions import EmbeddingInputTooLong
 from src.retrieval.metrics import empty_result_alarm
-from src.retrieval.models import DatabaseUnavailable, RetrievalError, SearchResult
+from src.retrieval.models import SearchResult
 from src.retrieval.service import RetrievalService
 from tests.retrieval.fakes import (
     CALLER_ARN,
@@ -52,8 +62,8 @@ def retrieve(service: RetrievalService, body: dict[str, Any] = BODY, user_id: st
     return service.retrieve(REQUEST_ID, CALLER_ARN, user_id, body)
 
 
-def failure(service: RetrievalService, body: dict[str, Any] = BODY) -> RetrievalError:
-    with pytest.raises(RetrievalError) as caught:
+def failure(service: RetrievalService, body: dict[str, Any] = BODY) -> AppError:
+    with pytest.raises(AppError) as caught:
         retrieve(service, body)
     return caught.value
 
@@ -107,14 +117,14 @@ def test_at_most_three_chunks_per_document_and_k_is_respected() -> None:
 
 
 def test_database_failure_is_retried_once_after_one_second() -> None:
-    search = FakeSearch(DatabaseUnavailable(), SearchResult([hit()], "c1"))
+    search = FakeSearch(DatabaseUnavailableError(), SearchResult([hit()], "c1"))
     service, _, _, _, sleeps = build(search=search)
     assert len(retrieve(service).to_dict()["chunks"]) == 1
     assert sleeps == [1.0] and len(search.calls) == 2
 
 
 def test_database_failing_twice_returns_database_unavailable() -> None:
-    search = FakeSearch(DatabaseUnavailable())
+    search = FakeSearch(DatabaseUnavailableError())
     service, _, _, _, sleeps = build(search=search)
     error = failure(service)
     assert (error.code, error.status) == ("database_unavailable", 503)
@@ -212,7 +222,7 @@ def test_unexpected_exception_in_a_step_surfaces_as_internal_error_without_its_t
     service, *_ = build(FakeEmbedder(RuntimeError("connection to arn:aws:rds:secret failed")))
     error = failure(service)
     assert (error.code, error.status) == ("internal_error", 500)
-    assert "secret" not in error.message
+    assert "secret" not in error.user_message
 
 
 def test_every_error_code_has_a_stable_status_and_generic_message() -> None:
@@ -226,10 +236,11 @@ def test_every_error_code_has_a_stable_status_and_generic_message() -> None:
         "timeout": 504,
         "internal_error": 500,
     }
-    for code, status in expected.items():
-        error = RetrievalError(code)
-        assert (error.status, error.code) == (status, code)
-        assert error.message and "Traceback" not in error.message
+    errors = [InvalidArgumentError, ScopeNotEnabledError, UserContextMissingError, CallerNotAllowedError,
+              EmbeddingUnavailableError, DatabaseUnavailableError, DeadlineExceededError, AppError]
+    assert {e.code: e.status for e in errors} == expected
+    for error_type in errors:
+        assert error_type.user_message and "Traceback" not in error_type.user_message
 
 
 # --- KN-RET-08 ---
@@ -267,15 +278,15 @@ def test_no_log_line_contains_the_query_or_chunk_text(caplog: pytest.LogCaptureF
                                                                          text=chunk_text)], "c1"))),
         build(FakeEmbedder(unavailable())),
         build(FakeEmbedder(RuntimeError(f"boom {MARKER}"))),
-        build(search=FakeSearch(DatabaseUnavailable())),
+        build(search=FakeSearch(DatabaseUnavailableError())),
         build(),
     ]
     for service, *_ in scenarios[:-1]:
         try:
             retrieve(service, body)
-        except RetrievalError:
+        except AppError:
             pass
-    with pytest.raises(RetrievalError):
+    with pytest.raises(AppError):
         retrieve(scenarios[-1][0], {**body, "k": 99})
     text = "\n".join(r.getMessage() + str(r.__dict__) for r in caplog.records)
     assert MARKER not in text and "CHUNK-TEXT-MARKER" not in text

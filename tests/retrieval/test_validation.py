@@ -9,13 +9,14 @@ from typing import Any
 
 import pytest
 
-from src.retrieval.models import RetrievalError, parse_request
+from src.core.exceptions import AppError
+from src.retrieval.schemas import parse_request
 
 VALID: dict[str, Any] = {"query": "How do I confirm a CSV mapping?", "scope": "system", "k": 5}
 
 
-def rejected(body: Any) -> RetrievalError:
-    with pytest.raises(RetrievalError) as caught:
+def rejected(body: Any) -> AppError:
+    with pytest.raises(AppError) as caught:
         parse_request(body)
     return caught.value
 
@@ -33,7 +34,7 @@ def test_missing_k_defaults_to_five() -> None:
 def test_k_out_of_range_is_invalid_and_names_the_field(k: int) -> None:
     error = rejected({**VALID, "k": k})
     assert (error.code, error.status) == ("invalid_argument", 400)
-    assert "k" in error.message.split()[-1]
+    assert "k" in error.user_message.split()[-1]
 
 
 @pytest.mark.parametrize("k", ["5", 5.0, True, None])
@@ -45,7 +46,7 @@ def test_non_integer_k_is_invalid(k: Any) -> None:
 def test_blank_or_non_string_query_is_invalid(query: Any) -> None:
     error = rejected({**VALID, "query": query})
     assert error.code == "invalid_argument"
-    assert error.message.endswith("query.")
+    assert error.user_message.endswith("query.")
 
 
 def test_query_over_1000_characters_is_invalid_and_1000_passes() -> None:
@@ -56,7 +57,7 @@ def test_query_over_1000_characters_is_invalid_and_1000_passes() -> None:
 def test_extra_field_is_rejected_including_a_user_id() -> None:
     error = rejected({**VALID, "user_id": "user-b"})
     assert error.code == "invalid_argument"
-    assert "user-b" not in error.message
+    assert "user-b" not in error.user_message
 
 
 def test_missing_query_or_scope_is_invalid() -> None:
@@ -79,4 +80,4 @@ def test_body_that_is_not_an_object_is_invalid() -> None:
 
 
 def test_error_message_never_echoes_the_input() -> None:
-    assert "SECRET-MARKER" not in rejected({**VALID, "k": "SECRET-MARKER"}).message
+    assert "SECRET-MARKER" not in rejected({**VALID, "k": "SECRET-MARKER"}).user_message
