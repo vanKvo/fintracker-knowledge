@@ -16,11 +16,11 @@ CREATE TABLE kn_documents (
     embedding_model text        NOT NULL,
     chunk_count     int         NOT NULL,
     indexed_at      timestamptz NOT NULL,
-    -- system rows have no owner; mine rows must have a non-empty one ('' is what an unset
+    -- system rows have no owner; user rows must have a non-empty one ('' is what an unset
     -- user context reads as, so it must never be a real owner).
     CONSTRAINT kn_documents_scope_owner CHECK (
         (scope = 'system' AND user_id IS NULL)
-        OR (scope = 'mine' AND user_id IS NOT NULL AND user_id <> '')
+        OR (scope = 'user' AND user_id IS NOT NULL AND user_id <> '')
     ),
     -- Targets for kn_chunks' composite foreign keys, so a chunk can't disagree with its document.
     CONSTRAINT kn_documents_id_scope UNIQUE (document_id, scope),
@@ -45,7 +45,7 @@ CREATE TABLE kn_chunks (
     embedding_model text        NOT NULL,
     CONSTRAINT kn_chunks_scope_owner CHECK (
         (scope = 'system' AND user_id IS NULL)
-        OR (scope = 'mine' AND user_id IS NOT NULL AND user_id <> '')
+        OR (scope = 'user' AND user_id IS NOT NULL AND user_id <> '')
     ),
     -- scope always matches the document's; user_id matches whenever the chunk has one (a
     -- system chunk's null user_id is then only possible on a system document).

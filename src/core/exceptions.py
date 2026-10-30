@@ -56,7 +56,7 @@ class InvalidArgumentError(AppError):
 
 
 class ScopeNotEnabledError(AppError):
-    """KN-RET-02: `scope = mine` before KN-UDOC ships."""
+    """KN-RET-02: `scope = user` before KN-UDOC ships."""
 
     status, code, title = 400, "scope_not_enabled", "Scope not enabled"
     user_message = "This scope is not available yet."

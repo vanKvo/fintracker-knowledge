@@ -69,7 +69,7 @@ def parse_request(body: Any) -> RetrieveRequest:
         raise InvalidArgumentError.for_field("query")
 
     scope = body.get("scope")
-    if scope == "mine":
+    if scope == "user":
         raise ScopeNotEnabledError()  # until KN-UDOC ships
     if scope != "system":
         raise InvalidArgumentError.for_field("scope")
