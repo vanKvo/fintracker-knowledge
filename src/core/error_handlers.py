@@ -22,6 +22,7 @@ import logging
 import traceback
 from typing import Any
 
+from . import observability  # noqa: F401  (XS-ACCT-06: installs the card-number log mask)
 from .exceptions import AppError, DependencyError
 
 TYPE_BASE = "https://fintracker.app/errors/"
