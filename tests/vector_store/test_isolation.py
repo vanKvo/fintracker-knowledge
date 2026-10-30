@@ -38,11 +38,11 @@ def assert_no_foreign_rows(table: str, found: set[uuid.UUID], forbidden: set[uui
 @pytest.fixture
 def seed(admin_engine: Engine) -> Seed:
     doc_sys = insert_document(admin_engine, "system", None, "help/a.md")
-    doc_a = insert_document(admin_engine, "mine", "user-a", "doc-1")
-    doc_b = insert_document(admin_engine, "mine", "user-b", "doc-1")
+    doc_a = insert_document(admin_engine, "user", "user-a", "doc-1")
+    doc_b = insert_document(admin_engine, "user", "user-b", "doc-1")
     # User B's chunk is the nearest to the query vector (position 0), then user A's, then system.
-    b = insert_chunk(admin_engine, doc_b, "mine", "user-b", unit_vector(0), chunk_text="user b secret")
-    a = insert_chunk(admin_engine, doc_a, "mine", "user-a", unit_vector(1))
+    b = insert_chunk(admin_engine, doc_b, "user", "user-b", unit_vector(0), chunk_text="user b secret")
+    a = insert_chunk(admin_engine, doc_a, "user", "user-a", unit_vector(1))
     s = insert_chunk(admin_engine, doc_sys, "system", None, unit_vector(2))
     return Seed({doc_b}, {b}, {a}, {s})
 

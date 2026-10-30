@@ -65,9 +65,14 @@ def test_missing_query_or_scope_is_invalid() -> None:
     assert rejected({"query": "q"}).code == "invalid_argument"
 
 
-def test_scope_mine_is_not_enabled_yet() -> None:
-    error = rejected({**VALID, "scope": "mine"})
+def test_scope_user_is_not_enabled_yet() -> None:
+    error = rejected({**VALID, "scope": "user"})
     assert (error.code, error.status) == ("scope_not_enabled", 400)
+
+
+def test_old_scope_name_mine_is_now_unknown() -> None:
+    error = rejected({**VALID, "scope": "mine"})
+    assert (error.code, error.status) == ("invalid_argument", 400)
 
 
 def test_unknown_scope_is_invalid() -> None:

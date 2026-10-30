@@ -141,7 +141,7 @@ def test_correct_rls_drops_nothing_and_emits_no_mismatch() -> None:
 
 
 def test_chunk_owned_by_another_user_is_dropped_and_counted_with_ids_only() -> None:
-    leaked = hit(0.01, scope="mine", user_id=OTHER_USER_ID, text="user b secret")
+    leaked = hit(0.01, scope="user", user_id=OTHER_USER_ID, text="user b secret")
     kept = hit(0.3)
     service, _, _, metrics, _ = build(search=FakeSearch(SearchResult([leaked, kept], "c1")))
     ids = {c["chunk_id"] for c in retrieve(service, BODY).to_dict()["chunks"]}
@@ -157,14 +157,14 @@ def test_system_chunk_with_an_owner_is_dropped() -> None:
 
 
 def test_chunk_of_a_scope_other_than_requested_is_dropped() -> None:
-    wrong = hit(0.01, scope="mine", user_id=USER_ID)
+    wrong = hit(0.01, scope="user", user_id=USER_ID)
     service, _, _, metrics, _ = build(search=FakeSearch(SearchResult([wrong, hit(0.2)], "c1")))
     assert wrong.chunk_id not in {c["chunk_id"] for c in retrieve(service).to_dict()["chunks"]}
     assert len(metrics.mismatches) == 1
 
 
 def test_a_mismatch_is_reported_even_when_it_empties_the_result() -> None:
-    leaked = hit(0.01, scope="mine", user_id=OTHER_USER_ID)
+    leaked = hit(0.01, scope="user", user_id=OTHER_USER_ID)
     service, _, _, metrics, _ = build(search=FakeSearch(SearchResult([leaked], "c1")))
     assert retrieve(service).to_dict()["chunks"] == []
     assert len(metrics.mismatches) == 1
@@ -201,7 +201,7 @@ def test_response_names_the_model_and_index_commit() -> None:
 
 
 def test_response_never_carries_vectors_owner_or_document_id() -> None:
-    h = hit(scope="mine", user_id=USER_ID)
+    h = hit(scope="user", user_id=USER_ID)
     service, *_ = build(search=FakeSearch(SearchResult([h], "c1")))
     rendered = str(retrieve(service, BODY).to_dict())
     assert h.document_id not in rendered and USER_ID not in rendered and "embedding\"" not in rendered
@@ -265,7 +265,7 @@ def test_a_failed_request_emits_the_error_code_and_zero_results() -> None:
 
 def test_a_validation_failure_still_emits_a_metric_with_unknown_scope_and_k() -> None:
     service, _, _, metrics, _ = build()
-    failure(service, {"query": "q", "scope": "mine"})
+    failure(service, {"query": "q", "scope": "user"})
     assert metrics.requests[0].error_code == "scope_not_enabled"
 
 
@@ -274,7 +274,7 @@ def test_no_log_line_contains_the_query_or_chunk_text(caplog: pytest.LogCaptureF
     body = {**BODY, "query": MARKER}
     chunk_text = "CHUNK-TEXT-MARKER-5522"
     scenarios = [
-        build(search=FakeSearch(SearchResult([hit(text=chunk_text), hit(0.2, scope="mine", user_id="x",
+        build(search=FakeSearch(SearchResult([hit(text=chunk_text), hit(0.2, scope="user", user_id="x",
                                                                          text=chunk_text)], "c1"))),
         build(FakeEmbedder(unavailable())),
         build(FakeEmbedder(RuntimeError(f"boom {MARKER}"))),

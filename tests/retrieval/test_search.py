@@ -46,8 +46,8 @@ def test_system_scope_returns_only_system_chunks_nearest_first_even_when_user_ch
     admin_engine: Engine, app_engine: Engine
 ) -> None:
     system_doc = insert_document(admin_engine, "system", None, "help/a.md")
-    mine_doc = insert_document(admin_engine, "mine", "user-a", "doc-1")
-    insert_chunk(admin_engine, mine_doc, "mine", "user-a", unit_vector(0), chunk_text="nearest but mine")
+    user_doc = insert_document(admin_engine, "user", "user-a", "doc-1")
+    insert_chunk(admin_engine, user_doc, "user", "user-a", unit_vector(0), chunk_text="nearest but user")
     far = insert_chunk(admin_engine, system_doc, "system", None, unit_vector(2), ordinal=0)
     near = insert_chunk(admin_engine, system_doc, "system", None, blend(1), ordinal=1)
 
@@ -73,12 +73,12 @@ def test_hits_carry_source_path_heading_text_and_distance(admin_engine: Engine, 
 def test_user_context_is_set_in_the_same_transaction_so_only_own_mine_rows_are_visible(
     admin_engine: Engine, app_engine: Engine
 ) -> None:
-    doc_a = insert_document(admin_engine, "mine", "user-a", "doc-1")
-    doc_b = insert_document(admin_engine, "mine", "user-b", "doc-1")
-    a = insert_chunk(admin_engine, doc_a, "mine", "user-a", unit_vector(1))
-    insert_chunk(admin_engine, doc_b, "mine", "user-b", unit_vector(0))
+    doc_a = insert_document(admin_engine, "user", "user-a", "doc-1")
+    doc_b = insert_document(admin_engine, "user", "user-b", "doc-1")
+    a = insert_chunk(admin_engine, doc_a, "user", "user-a", unit_vector(1))
+    insert_chunk(admin_engine, doc_b, "user", "user-b", unit_vector(0))
 
-    hits = search_as_retrieve(app_engine).search("user-a", QUERY, "mine", EMBEDDING_MODEL, 10).hits
+    hits = search_as_retrieve(app_engine).search("user-a", QUERY, "user", EMBEDDING_MODEL, 10).hits
 
     assert [h.chunk_id for h in hits] == [str(a)]
 

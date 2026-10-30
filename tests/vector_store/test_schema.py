@@ -34,8 +34,8 @@ def test_migration_creates_tables_and_pgvector_extension(admin_engine: Engine) -
 
 @pytest.mark.parametrize(
     ("scope", "user_id"),
-    [("system", "user-a"), ("mine", None), ("mine", ""), ("shared", None)],
-    ids=["system-with-owner", "mine-without-owner", "mine-with-empty-owner", "unknown-scope"],
+    [("system", "user-a"), ("user", None), ("user", ""), ("shared", None)],
+    ids=["system-with-owner", "user-without-owner", "user-with-empty-owner", "unknown-scope"],
 )
 def test_scope_and_owner_check_constraint_rejects_invalid_combinations(
     admin_engine: Engine, scope: str, user_id: str | None
@@ -45,7 +45,7 @@ def test_scope_and_owner_check_constraint_rejects_invalid_combinations(
     assert isinstance(exc.value.orig, psycopg.errors.CheckViolation)
 
 
-@pytest.mark.parametrize(("scope", "user_id"), [("system", None), ("mine", "user-a")])
+@pytest.mark.parametrize(("scope", "user_id"), [("system", None), ("user", "user-a")])
 def test_second_document_with_same_scope_owner_and_path_is_rejected(
     admin_engine: Engine, scope: str, user_id: str | None
 ) -> None:
@@ -56,9 +56,9 @@ def test_second_document_with_same_scope_owner_and_path_is_rejected(
 
 
 def test_same_path_under_a_different_owner_or_model_is_allowed(admin_engine: Engine) -> None:
-    insert_document(admin_engine, "mine", "user-a", "doc-1")
-    insert_document(admin_engine, "mine", "user-b", "doc-1")
-    insert_document(admin_engine, "mine", "user-a", "doc-1", model="other-model")
+    insert_document(admin_engine, "user", "user-a", "doc-1")
+    insert_document(admin_engine, "user", "user-b", "doc-1")
+    insert_document(admin_engine, "user", "user-a", "doc-1", model="other-model")
 
 
 def test_deleting_a_document_deletes_its_chunks(admin_engine: Engine) -> None:
@@ -80,23 +80,23 @@ def test_chunk_embedding_model_must_equal_the_documents(admin_engine: Engine) ->
 
 @pytest.mark.parametrize(
     ("chunk_scope", "chunk_user"),
-    [("system", None), ("mine", "user-b"), ("mine", "user-a")],
-    ids=["system-chunk-on-mine-doc", "other-owner", "mine-chunk-on-system-doc"],
+    [("system", None), ("user", "user-b"), ("user", "user-a")],
+    ids=["system-chunk-on-user-doc", "other-owner", "user-chunk-on-system-doc"],
 )
 def test_chunk_scope_and_owner_must_equal_the_documents(
     admin_engine: Engine, chunk_scope: str, chunk_user: str | None
 ) -> None:
-    mine_doc = insert_document(admin_engine, "mine", "user-a", "doc-1")
+    user_doc = insert_document(admin_engine, "user", "user-a", "doc-1")
     system_doc = insert_document(admin_engine, "system", None, "help/a.md")
-    document = system_doc if chunk_scope == "mine" and chunk_user == "user-a" else mine_doc
+    document = system_doc if chunk_scope == "user" and chunk_user == "user-a" else user_doc
     with pytest.raises(DBAPIError) as exc:
         insert_chunk(admin_engine, document, chunk_scope, chunk_user, unit_vector(0))
     assert isinstance(exc.value.orig, psycopg.errors.ForeignKeyViolation)
 
 
 def test_chunk_with_matching_document_is_accepted(admin_engine: Engine) -> None:
-    doc = insert_document(admin_engine, "mine", "user-a", "doc-1")
-    insert_chunk(admin_engine, doc, "mine", "user-a", unit_vector(0))
+    doc = insert_document(admin_engine, "user", "user-a", "doc-1")
+    insert_chunk(admin_engine, doc, "user", "user-a", unit_vector(0))
 
 
 def test_embedding_must_have_the_configured_dimensions(admin_engine: Engine) -> None:

@@ -90,10 +90,10 @@ def test_delete_role_cannot_delete_system_rows(app_engine: Engine, admin_engine:
 
 
 def test_delete_role_deletes_only_the_current_users_mine_rows(app_engine: Engine, admin_engine: Engine) -> None:
-    doc_a = insert_document(admin_engine, "mine", "user-a", "doc-1")
-    doc_b = insert_document(admin_engine, "mine", "user-b", "doc-1")
-    insert_chunk(admin_engine, doc_a, "mine", "user-a", unit_vector(0))
-    insert_chunk(admin_engine, doc_b, "mine", "user-b", unit_vector(1))
+    doc_a = insert_document(admin_engine, "user", "user-a", "doc-1")
+    doc_b = insert_document(admin_engine, "user", "user-b", "doc-1")
+    insert_chunk(admin_engine, doc_a, "user", "user-a", unit_vector(0))
+    insert_chunk(admin_engine, doc_b, "user", "user-b", unit_vector(1))
     with transaction_as(app_engine, "kn_delete", "user-a") as conn:
         assert conn.execute(text("DELETE FROM kn_documents")).rowcount == 1
     with admin_engine.connect() as conn:
@@ -104,7 +104,7 @@ def test_delete_role_deletes_only_the_current_users_mine_rows(app_engine: Engine
 
 
 def test_delete_role_without_user_context_deletes_nothing(app_engine: Engine, admin_engine: Engine) -> None:
-    insert_document(admin_engine, "mine", "user-a", "doc-1")
+    insert_document(admin_engine, "user", "user-a", "doc-1")
     with transaction_as(app_engine, "kn_delete") as conn:
         assert conn.execute(text("DELETE FROM kn_documents")).rowcount == 0
 
