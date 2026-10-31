@@ -32,6 +32,7 @@ class DocumentIndex(Protocol):
     def delete(self, path: str) -> int: ...
     def record_run(self, record: RunRecord) -> None: ...
     def last_succeeded_run(self) -> IndexStatus: ...
+    def counts(self) -> tuple[int, int]: ...
 
 
 def _vector_literal(values: tuple[float, ...]) -> str:
@@ -140,6 +141,13 @@ class PostgresDocumentIndex:
             ).first()
         finished: datetime | None = row[1] if row else None
         return IndexStatus(row[0] if row else None, finished)
+
+    def counts(self) -> tuple[int, int]:
+        """(system documents, system chunks) currently indexed, for the local `status` command."""
+        with self._transaction() as conn:
+            documents = conn.execute(text("SELECT count(*) FROM kn_documents WHERE scope = 'system'")).scalar()
+            chunks = conn.execute(text("SELECT count(*) FROM kn_chunks WHERE scope = 'system'")).scalar()
+        return int(documents or 0), int(chunks or 0)
 
     @contextmanager
     def _transaction(self) -> Iterator[Connection]:
