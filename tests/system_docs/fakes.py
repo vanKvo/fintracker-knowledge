@@ -140,3 +140,52 @@ def searchable_texts(app_engine: Engine, path: str) -> list[str]:
             {"p": path},
         )
         return [r[0] for r in rows]
+
+
+class MemoryIndex:
+    """An in-memory `DocumentIndex` for command-level tests that need no database. `replace` is one step, so a
+    document's previous chunks stay until the new ones are written (the atomic replace of KN-SDOC-03)."""
+
+    def __init__(self) -> None:
+        self.documents: dict[tuple[str, str], tuple[str, str, int]] = {}  # (path, model) -> hash, commit, chunks
+        self.runs: list[Any] = []
+
+    def is_indexed(self, path: str, content_hash: str, model: str) -> bool:
+        stored = self.documents.get((path, model))
+        return stored is not None and stored[0] == content_hash
+
+    def replace(self, path: str, content_hash: str, commit: str, model: str, chunks: list[EmbeddedChunk]) -> int:
+        self.documents[(path, model)] = (content_hash, commit, len(chunks))
+        return len(chunks)
+
+    def delete(self, path: str) -> int:
+        removed = [key for key in self.documents if key[0] == path]
+        for key in removed:
+            del self.documents[key]
+        return 1 if removed else 0
+
+    def record_run(self, record: Any) -> None:
+        self.runs.append(record)
+
+    def last_succeeded_run(self) -> Any:
+        from src.system_docs.models import IndexStatus
+
+        done = [r for r in self.runs if r.status == "succeeded"]
+        return IndexStatus(done[-1].commit, done[-1].finished_at) if done else IndexStatus(None, None)
+
+    def counts(self) -> tuple[int, int]:
+        return len(self.documents), sum(chunks for _, _, chunks in self.documents.values())
+
+
+class FailingFor(FakeEmbedder):
+    """Fails (as unavailable) for any chunk whose text holds `marker`, and embeds the rest."""
+
+    def __init__(self, marker: str) -> None:
+        super().__init__()
+        self.marker = marker
+
+    def embed_chunks(self, chunks: list[Chunk]) -> list[EmbeddedChunk]:
+        if any(self.marker in chunk.text for chunk in chunks):
+            self.calls += 1
+            raise EmbeddingUnavailableError()
+        return super().embed_chunks(chunks)

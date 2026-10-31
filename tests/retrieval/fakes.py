@@ -12,8 +12,8 @@ from src.core.exceptions import EmbeddingUnavailableError
 from src.retrieval.metrics import RequestMetrics
 from src.retrieval.models import SearchHit, SearchResult
 
-USER_ID = "user-a"
-OTHER_USER_ID = "user-b"
+USER_ID = "11111111-1111-4111-8111-111111111111"
+OTHER_USER_ID = "22222222-2222-4222-8222-222222222222"
 CALLER_ARN = "arn:aws:iam::111122223333:role/ai-assistant"
 REQUEST_ID = "req-123"
 MODEL = "amazon.titan-embed-text-v2:0"

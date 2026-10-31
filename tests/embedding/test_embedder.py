@@ -143,3 +143,14 @@ def test_failure_logs_never_contain_chunk_text(caplog: pytest.LogCaptureFixture)
     with caplog.at_level("DEBUG"), pytest.raises(EmbeddingUnavailableError):
         emb.embed_chunk(make_chunk(text=SECRET_TEXT))
     assert SECRET_TEXT not in caplog.text
+
+
+def test_missing_credentials_fail_at_once_without_retries() -> None:
+    """KN-FAPI-05: retrying a credential that is not there only delays the 503."""
+    from botocore.exceptions import NoCredentialsError
+
+    client = FakeBedrock(NoCredentialsError())
+    emb, sleeps = embedder(client)
+    with pytest.raises(EmbeddingUnavailableError):
+        emb.embed_query("How do I confirm a CSV mapping?")
+    assert len(client.calls) == 1 and sleeps == []
