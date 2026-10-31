@@ -3,3 +3,9 @@ __pycache__/
 .venv/
 .mypy_cache/
 .pytest_cache/
+
+# KN-FAPI-07: local database and login passwords. Copy .env.local.example and fill it in; never commit it.
+.env.local
+
+# KN-CHUNK-05: local live-run reports (the S3 copy is the record). The committed snapshot is tests/fixtures/rag/.
+eval/rag_eval_results/

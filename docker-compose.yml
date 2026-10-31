@@ -1,0 +1,96 @@
+# KN-FAPI-09: Knowledge as a local container: the migrations, the app, and an on-demand index job, against a `knowledge`
+# database in the shared local PostgreSQL container (infrastructure/local-postgres/, also used by the Ledger).
+# No Postgres container here. That container creates the `knowledge` database and the login roles on its first start.
+#
+#   cp .env.local.example .env.local      # once: set the passwords to the values in infrastructure/local-postgres/.env
+#   docker compose up -d                  # migrations (one-shot), app on :8087
+#   docker compose --profile index run --rm knowledge-index    # indexes the snapshot corpus from the recording (free)
+#
+# INTERNAL_AUTH_MODE=local and the caller allow-list are set here and nowhere else: the app refuses `local` in an AWS
+# runtime and the Terraform never sets it. Row-Level Security applies locally exactly as in AWS: the app connects as
+# kn_app_retrieve (a member of kn_retrieve, no superuser, no BYPASSRLS), checked at start.
+#
+# The containers reach the shared Postgres container as host.docker.internal:5432. Service names carry the `knowledge-` prefix because
+# the root docker-compose.yml includes this file beside others.
+#
+# Embedding (KN-CHUNK-05): KNOWLEDGE_EMBEDDER=replay. The stack answers from the recording in tests/fixtures/rag/ and holds
+# no AWS credentials: nothing here mounts ~/.aws or passes a key, so neither a person's typo nor an AI agent can start a
+# paid Bedrock call from this stack. The index job loads the snapshot corpus, and the API serves the golden and negative
+# questions only; any other question gets 503 embedding_unavailable. Real embeddings are made by the owner's live
+# evaluation (python -m src.rag_eval live), which refreshes the recording. Never set AWS_ENDPOINT_URL.
+name: fintracker
+
+x-knowledge-env: &knowledge-env
+  env_file:
+    # Passwords only. Absent file: the database image and the app stop at start, naming the missing variable.
+    - path: .env.local
+      required: false
+
+x-knowledge-app: &knowledge-app
+  build:
+    # The monorepo root, so the shared library under libs/ is part of the build (LB-IHTTP-09).
+    context: ../..
+    dockerfile: services/fintracker-knowledge/Dockerfile
+  image: fintracker-knowledge:local
+  <<: *knowledge-env
+  volumes:
+    - ./tests/fixtures/rag:/rag:ro
+
+services:
+  # One-shot: Flyway applies db/migration as the admin user, never from the app (README: separate deploy step).
+  knowledge-migrate:
+    image: flyway/flyway:11
+    container_name: fintracker-knowledge-migrate
+    <<: *knowledge-env
+    restart: "no"
+    # The administrative user (FLYWAY_USER / FLYWAY_PASSWORD in .env.local) creates the vector extension and the tables.
+    command: ["-url=jdbc:postgresql://host.docker.internal:5432/knowledge", "-connectRetries=3", "-locations=filesystem:/flyway/sql", "migrate"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./db/migration:/flyway/sql:ro
+
+  knowledge-api:
+    <<: *knowledge-app
+    container_name: fintracker-knowledge-api
+    ports:
+      - "8087:8087"
+    environment:
+      INTERNAL_AUTH_MODE: local
+      # The AI assistant's local caller (its INTERNAL_LOCAL_CALLER_ARN). A caller off this list gets a 403.
+      INTERNAL_ALLOWED_CALLER_ARNS: arn:local:ai-assistant
+      KNOWLEDGE_DB_MODE: postgres
+      KNOWLEDGE_DB_HOST: host.docker.internal
+      KNOWLEDGE_DB_PORT: "5432"
+      KNOWLEDGE_DB_NAME: knowledge
+      KNOWLEDGE_DB_RETRIEVE_USER: kn_app_retrieve
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      KNOWLEDGE_EMBEDDER: replay
+      KNOWLEDGE_REPLAY_DIR: /rag
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      knowledge-migrate:
+        condition: service_completed_successfully
+
+  # On demand (profile `index`): reads the snapshot corpus and writes chunks as kn_ingest, with vectors from the recording.
+  knowledge-index:
+    <<: *knowledge-app
+    container_name: fintracker-knowledge-index
+    profiles: ["index"]
+    restart: "no"
+    command: ["python", "-m", "src.system_docs.cli", "index", "--root", "/rag/corpus", "--commit", "${KNOWLEDGE_INDEX_COMMIT:-snapshot}"]
+    environment:
+      KNOWLEDGE_DB_MODE: postgres
+      KNOWLEDGE_DB_HOST: host.docker.internal
+      KNOWLEDGE_DB_PORT: "5432"
+      KNOWLEDGE_DB_NAME: knowledge
+      KNOWLEDGE_DB_INGEST_USER: kn_app_ingest
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      KNOWLEDGE_EMBEDDER: replay
+      KNOWLEDGE_REPLAY_DIR: /rag
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      knowledge-migrate:
+        condition: service_completed_successfully
