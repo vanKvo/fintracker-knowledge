@@ -15,11 +15,13 @@ import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+
 from src.chunking.schemas import Chunk
 from src.chunking.service import estimate_tokens
 from src.config.knowledge_config import EmbeddingConfig
 from src.core.exceptions import EmbeddingUnavailableError
-from src.embedding.exceptions import EmbeddingInputTooLong
+from src.embedding.exceptions import EmbeddingInputTooLong, NonRetryableEmbeddingError
 from src.embedding.schemas import EmbeddedChunk
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,14 @@ logger = logging.getLogger(__name__)
 
 class BedrockRuntime(Protocol):
     def invoke_model(self, **kwargs: Any) -> dict[str, Any]: ...
+
+
+def chunk_input_text(chunk: Chunk) -> str:
+    """The text sent to the model for a chunk. The heading path shapes the vector, so it is part of the input.
+
+    The live evaluation (KN-CHUNK-05) records one vector per exact text, so this is the one place that builds it.
+    """
+    return f"{chunk.heading_path}\n\n{chunk.text}"
 
 
 class Embedder:
@@ -44,8 +54,7 @@ class Embedder:
         self._count_tokens = count_tokens
 
     def embed_chunk(self, chunk: Chunk) -> EmbeddedChunk:
-        # The heading path shapes the vector, so it is part of the embedded text.
-        vector = self._embed(f"{chunk.heading_path}\n\n{chunk.text}")
+        vector = self._embed(chunk_input_text(chunk))
         return EmbeddedChunk(chunk, vector, self._config.active_embedding_model)
 
     def embed_chunks(self, chunks: list[Chunk]) -> list[EmbeddedChunk]:
@@ -63,6 +72,14 @@ class Embedder:
         for attempt in range(attempts):
             try:
                 return self._invoke(text)
+            except (NoCredentialsError, PartialCredentialsError) as exc:
+                # No amount of waiting supplies a credential; fail now so the caller gets its 503 inside its budget.
+                logger.error("Embedding call failed: %s", type(exc).__name__)
+                raise EmbeddingUnavailableError(log_message="no AWS credentials for the embedding client") from None
+            except NonRetryableEmbeddingError as exc:
+                # A reason that waiting cannot change (a replay recording without this text): no backoff.
+                logger.error("Embedding call failed: %s", type(exc).__name__)
+                raise EmbeddingUnavailableError(log_message=str(exc)) from None
             except Exception as exc:  # noqa: BLE001 - any failure is retried, then reported generically
                 logger.error("Embedding call failed (attempt %d of %d): %s", attempt + 1, attempts, type(exc).__name__)
                 if attempt < attempts - 1:

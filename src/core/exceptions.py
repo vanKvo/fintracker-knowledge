@@ -62,6 +62,20 @@ class ScopeNotEnabledError(AppError):
     user_message = "This scope is not available yet."
 
 
+class NotFoundError(AppError):
+    """KN-FAPI-01: no such route. Cross-tenant requests are never 404 here: Knowledge has no per-user routes."""
+
+    status, code, title = 404, "not_found", "Not found"
+    user_message = "The requested route does not exist."
+
+
+class MethodNotAllowedError(AppError):
+    """KN-FAPI-01: the route exists, but not for this method."""
+
+    status, code, title = 405, "method_not_allowed", "Method not allowed"
+    user_message = "This route does not accept that method."
+
+
 class UserContextMissingError(AppError):
     """KN-RET-01: a signed request without a forwarded user context."""
 

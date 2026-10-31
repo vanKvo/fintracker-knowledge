@@ -11,13 +11,19 @@ sqlalchemy = "^2.0.40"
 boto3 = "^1.43.117"
 pyyaml = "^6.0.3"
 aws-lambda-powertools = "^3.10.1"
+# LB-IHTTP-09: shared internal HTTP (caller check, user context). Path install until the package registry exists (LB-PKG-04/05).
+fintracker-internal-http = {path = "../../libs/fintracker-internal-http", develop = true}
+fastapi = "^0.162.0"
+mangum = "^0.22.0"
+uvicorn = {extras = ["standard"], version = "^0.54.0"}
+psycopg = {extras = ["binary"], version = "^3.3.6"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
 mypy = "^1.15.0"
-psycopg = {extras = ["binary"], version = "^3.2.6"}
 testcontainers = {extras = ["postgres"], version = "^4.15.0"}
 types-pyyaml = "^6.0.12.20260906"
+httpx = "^0.28.1"
 
 [build-system]
 requires = ["poetry-core"]
